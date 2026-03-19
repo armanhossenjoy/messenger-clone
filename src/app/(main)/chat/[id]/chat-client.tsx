@@ -52,35 +52,49 @@ export default function ChatClient({
   const chatId = [currentUserId, otherUser.id].sort().join("-");
 
   const handleUnfriend = async () => {
-    const { error } = await supabase
+    // 1. Delete friendship
+    const { error: relError } = await supabase
       .from("friendships")
       .delete()
       .or(`and(user_id1.eq.${currentUserId},user_id2.eq.${otherUser.id}),and(user_id1.eq.${otherUser.id},user_id2.eq.${currentUserId})`);
 
-    if (error) {
+    if (relError) {
       toast.error("Failed to unfriend");
-    } else {
-      toast.success("Unfriended");
-      router.push("/");
-      router.refresh();
+      return;
     }
+
+    // 2. Delete messages
+    await supabase
+      .from("messages")
+      .delete()
+      .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUser.id}),and(sender_id.eq.${otherUser.id},receiver_id.eq.${currentUserId})`);
+
+    toast.success("Unfriended and chat history cleared");
+    router.push("/");
+    router.refresh();
   };
 
   const handleBlock = async () => {
-    // Determine which user is blocking. Actually, we update the status to 'blocked'.
-    // In our simplified schema, anyone in the friendship can set it to 'blocked'.
-    const { error } = await supabase
+    // 1. Update relationship status to 'blocked'
+    const { error: relError } = await supabase
       .from("friendships")
       .update({ status: "blocked" })
       .or(`and(user_id1.eq.${currentUserId},user_id2.eq.${otherUser.id}),and(user_id1.eq.${otherUser.id},user_id2.eq.${currentUserId})`);
 
-    if (error) {
+    if (relError) {
       toast.error("Failed to block user");
-    } else {
-      toast.success("User blocked");
-      router.push("/");
-      router.refresh();
+      return;
     }
+
+    // 2. Delete messages (optional but requested for unfriend, doing same here for privacy)
+    await supabase
+      .from("messages")
+      .delete()
+      .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUser.id}),and(sender_id.eq.${otherUser.id},receiver_id.eq.${currentUserId})`);
+
+    toast.success("User blocked and chat history cleared");
+    router.push("/");
+    router.refresh();
   };
 
   // Scroll to bottom
