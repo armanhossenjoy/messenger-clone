@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Info, Send, Phone, MoreVertical, Paperclip, ChevronLeft, UserMinus, Ban } from "lucide-react";
 import { clsx } from "clsx";
@@ -299,10 +299,8 @@ export default function ChatClient({
             <Info className="w-5 h-5" />
           </Button>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="hover:text-neutral-900">
-                <MoreVertical className="w-5 h-5" />
-              </Button>
+            <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "icon", className: "hover:text-neutral-900" })}>
+              <MoreVertical className="w-5 h-5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem onClick={handleUnfriend} className="text-amber-600 focus:text-amber-600">
