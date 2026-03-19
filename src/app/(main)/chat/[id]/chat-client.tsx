@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Info, Send, Phone, MoreVertical, Paperclip, ChevronLeft, UserMinus, Ban } from "lucide-react";
 import { clsx } from "clsx";
@@ -20,14 +20,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-type Message = {
-  id: string;
-  sender_id: string;
-  receiver_id: string;
-  content: string;
-  image_url: string | null;
-  created_at: string;
-};
+import { Message, Profile } from "@/lib/types";
 
 export default function ChatClient({ 
   currentUserId, 
@@ -35,7 +28,7 @@ export default function ChatClient({
   initialMessages 
 }: { 
   currentUserId: string, 
-  otherUser: { id: string; username: string; avatar_url: string | null }, 
+  otherUser: Profile, 
   initialMessages: Message[] 
 }) {
   const supabase = createClient();
@@ -88,7 +81,7 @@ export default function ChatClient({
       return;
     }
 
-    // 2. Delete messages (optional but requested for unfriend, doing same here for privacy)
+    // 2. Delete messages
     await supabase
       .from("messages")
       .delete()
@@ -102,11 +95,13 @@ export default function ChatClient({
   // Scroll to bottom
   useEffect(() => {
     setMounted(true);
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, otherUserTyping]);
+    if (mounted) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, otherUserTyping, mounted]);
 
   useEffect(() => {
-    // 1. Messages Subscription (Broader to catch all chat activity)
+    // 1. Messages Subscription
     const messageChannel = supabase.channel(`messages:${chatId}`)
       .on(
         "postgres_changes",
@@ -117,7 +112,6 @@ export default function ChatClient({
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          // Check if this message belongs to our current chat
           const isFromOther = newMessage.sender_id === otherUser.id && newMessage.receiver_id === currentUserId;
           const isFromSelf = newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUser.id;
           
@@ -126,6 +120,28 @@ export default function ChatClient({
               if (prev.find(m => m.id === newMessage.id)) return prev;
               return [...prev, newMessage];
             });
+
+            if (isFromOther) {
+              supabase
+                .from("messages")
+                .update({ status: "seen", seen_at: new Date().toISOString() })
+                .eq("id", newMessage.id)
+                .then();
+            }
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+        },
+        (payload) => {
+          const updatedMessage = payload.new as Message;
+          if (updatedMessage.sender_id === currentUserId || updatedMessage.receiver_id === currentUserId) {
+            setMessages((prev) => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m));
           }
         }
       )
@@ -137,15 +153,12 @@ export default function ChatClient({
           table: "messages",
         },
         () => {
-          // If messages are deleted (e.g. unfriend/block), clear local state
           setMessages([]);
         }
       )
-      .subscribe((status) => {
-        console.log("Friendlist sync status:", status);
-      });
+      .subscribe();
 
-    // 2. Typing indicator broadcast
+    // 2. Typing indicator
     const typingChannel = supabase.channel(`typing:${chatId}`);
     typingChannel
       .on("broadcast", { event: "typing" }, (payload) => {
@@ -153,16 +166,7 @@ export default function ChatClient({
           setOtherUserTyping(payload.payload.isTyping);
         }
       })
-      .subscribe((status) => {
-        console.log(`Typing channel status for ${chatId}:`, status);
-      });
-
-    messageChannel.subscribe((status) => {
-      console.log(`Message channel status for ${chatId}:`, status);
-      if (status === "CHANNEL_ERROR") {
-        console.error("Realtime connection blocked or failed. check your CSP/network.");
-      }
-    });
+      .subscribe();
 
     // 3. Presence
     const presenceChannel = supabase.channel("online-users");
@@ -171,8 +175,8 @@ export default function ChatClient({
         const state = presenceChannel.presenceState();
         let found = false;
         for (const key in state) {
-          const presences = state[key] as unknown as { user_id: string }[];
-          if (presences.some(p => p.user_id === otherUser.id)) {
+          const presences = state[key] as any;
+          if (presences.some((p: any) => p.user_id === otherUser.id)) {
             found = true;
             break;
           }
@@ -188,6 +192,17 @@ export default function ChatClient({
         }
       });
 
+    // 4. Mark unread as seen
+    const markAsSeen = async () => {
+      await supabase
+        .from("messages")
+        .update({ status: "seen", seen_at: new Date().toISOString() })
+        .eq("receiver_id", currentUserId)
+        .eq("sender_id", otherUser.id)
+        .neq("status", "seen");
+    };
+    markAsSeen();
+
     return () => {
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(typingChannel);
@@ -195,10 +210,9 @@ export default function ChatClient({
     };
   }, [supabase, currentUserId, otherUser.id, chatId]);
 
-  // Handle typing broadcast
+  // Typing broadcast
   useEffect(() => {
     const typingChannel = supabase.channel(`typing:${chatId}`);
-    
     if (newMessage.length > 0 && !isTyping) {
       setIsTyping(true);
       typingChannel.send({
@@ -218,32 +232,34 @@ export default function ChatClient({
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!newMessage.trim() && !fileInputRef.current?.files?.length) return;
+    if (!newMessage.trim()) return;
 
     const content = newMessage.trim();
     setNewMessage("");
     setIsTyping(false);
 
-    // Optimistic update for text
     const optimisticMessage: Message = {
       id: crypto.randomUUID(),
       sender_id: currentUserId,
       receiver_id: otherUser.id,
       content,
       image_url: null,
+      status: "sent",
+      delivered_at: null,
+      seen_at: null,
       created_at: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, optimisticMessage]);
 
-    // Send to Supabase
     const { error } = await supabase
       .from("messages")
       .insert({
         id: optimisticMessage.id,
         sender_id: currentUserId,
         receiver_id: otherUser.id,
-        content
+        content,
+        status: "sent",
       });
 
     if (error) {
@@ -262,8 +278,7 @@ export default function ChatClient({
     }
 
     setUploading(true);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
+    const fileName = `${Math.random()}.${file.name.split('.').pop()}`;
     const filePath = `${currentUserId}/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -276,32 +291,37 @@ export default function ChatClient({
       return;
     }
 
-    const { data } = supabase.storage
+    const { data: publicUrlData } = supabase.storage
       .from("chat_images")
       .getPublicUrl(filePath);
 
-    // Send message with image
+    const optimisticImageMessage: Message = {
+      id: crypto.randomUUID(),
+      sender_id: currentUserId,
+      receiver_id: otherUser.id,
+      content: "",
+      image_url: publicUrlData.publicUrl,
+      created_at: new Date().toISOString(),
+      status: "sent",
+      delivered_at: null,
+      seen_at: null,
+    };
+    setMessages(prev => [...prev, optimisticImageMessage]);
+
     const { error } = await supabase
       .from("messages")
       .insert({
+        id: optimisticImageMessage.id,
         sender_id: currentUserId,
         receiver_id: otherUser.id,
         content: "",
-        image_url: data.publicUrl
+        image_url: publicUrlData.publicUrl,
+        status: "sent",
       });
 
     if (error) {
-      toast.error("Failed to send image message");
-    } else {
-      // Optimistic append
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(),
-        sender_id: currentUserId,
-        receiver_id: otherUser.id,
-        content: "",
-        image_url: data.publicUrl,
-        created_at: new Date().toISOString()
-      }]);
+      toast.error("Failed to send image");
+      setMessages(prev => prev.filter(m => m.id !== optimisticImageMessage.id));
     }
     
     setUploading(false);
@@ -311,146 +331,178 @@ export default function ChatClient({
   return (
     <div className="flex-1 flex flex-col h-full bg-white relative">
       <LayoutGroup>
-      {/* Header */}
-      <div className="h-16 border-b border-neutral-200/60 flex items-center justify-between px-4 md:px-6 glass sticky top-0 z-20 shrink-0">
-        <div className="flex items-center gap-2 md:gap-3">
-          <Link href="/" className="md:hidden -ml-1 p-1 text-neutral-500 hover:text-neutral-900 transition-colors">
-            <ChevronLeft className="w-6 h-6" />
-          </Link>
-          <div className="relative">
-            <Avatar className="w-10 h-10 border border-neutral-100">
-              <AvatarImage src={otherUser.avatar_url || undefined} />
-              <AvatarFallback className="bg-neutral-100 text-neutral-600">
-                {otherUser.username?.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <span className={clsx(
-              "absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-white rounded-full transition-colors",
-              isOnline ? "bg-green-500" : "bg-neutral-300"
-            )} />
-          </div>
-          <div>
-            <h2 className="font-semibold text-neutral-900 leading-none mb-1">{otherUser.username}</h2>
-            <p className="text-xs text-neutral-500">{isOnline ? 'Active now' : 'Offline'}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 text-neutral-400">
-          <Button variant="ghost" size="icon" className="hover:text-blue-500">
-            <Phone className="w-5 h-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="hover:text-neutral-900">
-            <Info className="w-5 h-5" />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "icon", className: "hover:text-neutral-900" })}>
-              <MoreVertical className="w-5 h-5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleUnfriend} className="text-amber-600 focus:text-amber-600">
-                <UserMinus className="w-4 h-4 mr-2" />
-                Unfriend
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleBlock} className="text-red-600 focus:text-red-600 font-medium">
-                <Ban className="w-4 h-4 mr-2" />
-                Block User
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-neutral-50/30 scroll-smooth">
-        <AnimatePresence initial={false}>
-          {messages.map((message) => {
-            const isOwn = message.sender_id === currentUserId;
-            return (
-              <motion.div 
-                key={message.id}
-                layout
-                initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className={clsx("flex flex-col", isOwn ? "items-end" : "items-start")}
-              >
-                <div 
-                  className={clsx(
-                    "max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl shadow-sm transition-all duration-200",
-                    isOwn 
-                      ? "bg-blue-500 text-white rounded-br-sm highlight-white/10" 
-                      : "bg-white border border-neutral-200/60 text-neutral-900 rounded-bl-sm"
-                  )}
-                >
-                  {message.image_url && (
-                    <div className="mb-2 relative rounded-xl overflow-hidden bg-neutral-100 group">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={message.image_url || undefined} 
-                        alt="Shared image" 
-                        className="max-w-full max-h-[300px] object-contain group-hover:scale-[1.02] transition-transform duration-300" 
-                      />
-                    </div>
-                  )}
-                  {message.content && <p className="text-[15px] leading-relaxed break-words">{message.content}</p>}
-                </div>
-                <span className="text-[10px] text-neutral-400 mt-1.5 mx-1 font-medium tracking-tight">
-                  {mounted ? format(new Date(message.created_at), "p") : "..."}
-                </span>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-        {otherUserTyping && (
-          <div className="flex items-start">
-            <div className="bg-white border border-neutral-200 px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm flex gap-1 items-center">
-              <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+        {/* Header */}
+        <header className="h-16 border-b border-neutral-200/60 flex items-center justify-between px-4 md:px-6 glass sticky top-0 z-20 shrink-0">
+          <div className="flex items-center gap-2 md:gap-3">
+            <Link href="/" className="md:hidden -ml-1 p-1 text-neutral-500 hover:text-neutral-900 transition-colors">
+              <ChevronLeft className="w-6 h-6" />
+            </Link>
+            <div className="relative">
+              <Avatar className="w-10 h-10 border border-neutral-100">
+                <AvatarImage src={otherUser.avatar_url || undefined} />
+                <AvatarFallback className="bg-neutral-100 text-neutral-600">
+                  {(otherUser.display_name || otherUser.username)?.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className={clsx(
+                "absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-white rounded-full transition-colors",
+                isOnline ? "bg-green-500 animate-pulse-subtle" : "bg-neutral-300"
+              )}></span>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <h2 className="text-sm font-bold text-neutral-900 truncate tracking-tight">
+                {otherUser.display_name || otherUser.username}
+              </h2>
+              <p className="text-[10px] text-neutral-500 font-medium tracking-tight">
+                {otherUser.display_name ? `@${otherUser.username}` : (isOnline ? "Online now" : "Offline")}
+              </p>
             </div>
           </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Composer */}
-      <div className="p-4 bg-white border-t border-neutral-200 shrink-0">
-        <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto">
-          <input 
-            type="file" 
-            accept="image/*"
-            className="hidden" 
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-          />
-          <Button 
-            type="button" 
-            variant="ghost" 
-            size="icon" 
-            className="text-neutral-500 shrink-0 h-10 w-10 hover:bg-neutral-100"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? <span className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin"/> : <Paperclip className="w-5 h-5" />}
-          </Button>
-          <div className="flex-1 relative">
-            <Input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Message..."
-              className="pr-12 bg-neutral-50 border-neutral-200 rounded-full h-10 shadow-none focus-visible:ring-1 focus-visible:ring-blue-500"
-            />
+          
+          <div className="flex items-center gap-1 text-neutral-400">
+            <Button variant="ghost" size="icon" className="hover:text-blue-500">
+              <Phone className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="hover:text-neutral-900">
+              <Info className="w-5 h-5" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="hover:text-neutral-900">
+                  <MoreVertical className="w-5 h-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={handleUnfriend} className="text-amber-600 focus:text-amber-600">
+                  <UserMinus className="w-4 h-4 mr-2" />
+                  Unfriend
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleBlock} className="text-red-600 focus:text-red-600 font-medium">
+                  <Ban className="w-4 h-4 mr-2" />
+                  Block User
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <Button 
-            type="submit" 
-            size="icon" 
-            className="shrink-0 h-10 w-10 rounded-full bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50"
-            disabled={(!newMessage.trim() && !fileInputRef.current?.files?.length) || uploading}
-          >
-            <Send className="w-4 h-4 ml-0.5" />
-          </Button>
-        </form>
-      </div>
-    </LayoutGroup>
+        </header>
+
+        {/* Messages */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-neutral-50/30 scroll-smooth">
+          <AnimatePresence initial={false}>
+            {messages.map((message) => {
+              const isOwn = message.sender_id === currentUserId;
+              return (
+                <motion.div 
+                  key={message.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  className={clsx("flex flex-col", isOwn ? "items-end" : "items-start")}
+                >
+                  <div 
+                    className={clsx(
+                      "max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl shadow-sm transition-all duration-200",
+                      isOwn 
+                        ? "bg-blue-500 text-white rounded-br-sm highlight-white/10" 
+                        : "bg-white border border-neutral-200/60 text-neutral-900 rounded-bl-sm"
+                    )}
+                  >
+                    {message.image_url && (
+                      <div className="mb-2 relative rounded-xl overflow-hidden bg-neutral-100 group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={message.image_url} 
+                          alt="Shared image" 
+                          className="max-w-full max-h-[300px] object-contain group-hover:scale-[1.02] transition-transform duration-300" 
+                        />
+                      </div>
+                    )}
+                    {message.content && <p className="text-[15px] leading-relaxed break-words">{message.content}</p>}
+                    
+                    <div className="flex items-center justify-end gap-1 mt-1">
+                      <span className={clsx(
+                        "text-[10px]",
+                        isOwn ? "text-blue-100/70" : "text-neutral-400"
+                      )}>
+                        {mounted ? format(new Date(message.created_at), "p") : "..."}
+                      </span>
+                      {isOwn && (
+                        <span className="flex">
+                          {message.status === "sent" && (
+                            <svg className="w-3.5 h-3.5 text-blue-100/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {message.status === "delivered" && (
+                            <svg className="w-3.5 h-3.5 text-blue-100/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7m-4 0l4 4L19 7" />
+                            </svg>
+                          )}
+                          {message.status === "seen" && (
+                            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7m-4 0l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+          {otherUserTyping && (
+            <div className="flex items-start">
+              <div className="bg-white border border-neutral-200 px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm flex gap-1 items-center">
+                <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </main>
+
+        {/* Composer */}
+        <footer className="p-4 bg-white border-t border-neutral-200 shrink-0">
+          <form onSubmit={handleSendMessage} className="flex items-end gap-2 max-w-4xl mx-auto">
+            <input 
+              type="file" 
+              accept="image/*"
+              className="hidden" 
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+            />
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="icon" 
+              className="text-neutral-500 shrink-0 h-10 w-10 hover:bg-neutral-100"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? <span className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin"/> : <Paperclip className="w-5 h-5" />}
+            </Button>
+            <div className="flex-1 relative">
+              <Input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Message..."
+                className="pr-12 bg-neutral-50 border-neutral-200 rounded-full h-10 shadow-none focus-visible:ring-1 focus-visible:ring-blue-500"
+              />
+            </div>
+            <Button 
+              type="submit" 
+              size="icon" 
+              className="shrink-0 h-10 w-10 rounded-full bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50"
+              disabled={(!newMessage.trim() && !fileInputRef.current?.files?.length) || uploading}
+            >
+              <Send className="w-4 h-4 ml-0.5" />
+            </Button>
+          </form>
+        </footer>
+      </LayoutGroup>
     </div>
   );
 }

@@ -1,14 +1,16 @@
 import { User } from "@supabase/supabase-js";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/lib/supabase/server";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { SignOutButton } from "@/components/auth/SignOutButton";
 import { SidebarNav } from "./SidebarNav";
 import { FriendList } from "./FriendList";
+import { SidebarProfile } from "./SidebarProfile";
+import { Profile } from "@/lib/types";
 
-export async function Sidebar({ user, profile }: { user: User, profile: Record<string, string> | null }) {
+export async function Sidebar({ user, profile }: { user: User, profile: Profile | null }) {
   const supabase = createClient();
+  
+  if (!profile) return null;
   
   // Fetch all sidebar data in parallel
   const [friends1Res, friends2Res, pendingRes] = await Promise.all([
@@ -30,30 +32,15 @@ export async function Sidebar({ user, profile }: { user: User, profile: Record<s
   ]);
 
   const friends = [
-    ...(friends1Res.data?.map(f => f.friend) || []),
-    ...(friends2Res.data?.map(f => f.friend) || [])
+    ...(friends1Res.data?.map((f: any) => f.friend as Profile) || []),
+    ...(friends2Res.data?.map((f: any) => f.friend as Profile) || [])
   ];
 
   const pendingCount = pendingRes.count;
 
   return (
     <div className="w-full h-full flex flex-col bg-neutral-50/30">
-      {/* Header */}
-      <div className="p-4 flex items-center justify-between border-b border-neutral-200 bg-white">
-        <div className="flex items-center gap-3">
-          <Avatar className="w-10 h-10 border border-neutral-100">
-            <AvatarImage src={profile?.avatar_url || undefined} />
-            <AvatarFallback className="bg-neutral-900 text-white text-xs">
-              {profile?.username?.charAt(0).toUpperCase() || "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="text-sm">
-            <p className="font-semibold text-neutral-900 leading-none mb-1">{profile?.username || "..."}</p>
-            <p className="text-[11px] text-neutral-500 font-mono tracking-tight">{profile?.unique_id || "..."}</p>
-          </div>
-        </div>
-        <SignOutButton />
-      </div>
+      <SidebarProfile profile={profile} />
 
       <SidebarNav initialRequestCount={pendingCount || 0} userId={user.id} />
 

@@ -9,28 +9,39 @@ import { clsx } from "clsx";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
-type Friend = {
-  id: string;
-  username: string;
-  avatar_url: string | null;
-  last_message?: string;
-  is_online?: boolean;
-};
+import { Profile } from "@/lib/types";
 
 export function FriendList({ 
   initialFriends, 
   userId 
 }: { 
-  initialFriends: Friend[], 
+  initialFriends: Profile[], 
   userId: string 
 }) {
-  const [friends, setFriends] = useState<Friend[]>(initialFriends);
+  const [friends, setFriends] = useState<Profile[]>(initialFriends);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const supabase = createClient();
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
+    const fetchUnreadCounts = async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("sender_id")
+        .eq("receiver_id", userId)
+        .neq("status", "seen");
+      
+      if (data) {
+        const counts: Record<string, number> = {};
+        data.forEach(m => {
+          counts[m.sender_id] = (counts[m.sender_id] || 0) + 1;
+        });
+        setUnreadCounts(counts);
+      }
+    };
+    fetchUnreadCounts();
     // 1. Presence Subscription
     const presenceChannel = supabase.channel("online-users");
     presenceChannel
@@ -98,11 +109,44 @@ export function FriendList({
         console.log("FriendList real-time status:", status);
       });
 
+    // 3. Messages Subscription (Unread counts)
+    const messageChannel = supabase.channel("sidebar-unread")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `receiver_id=eq.${userId}`,
+        },
+        (payload) => {
+          const msg = payload.new;
+          const isChatOpen = pathname === `/chat/${msg.sender_id}`;
+          if (!isChatOpen) {
+            setUnreadCounts(prev => ({
+              ...prev,
+              [msg.sender_id]: (prev[msg.sender_id] || 0) + 1
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    // 4. Clear unread when pathname changes to a specific chat
+    const activeChatId = pathname.split("/").pop();
+    if (activeChatId && pathname.includes("/chat/")) {
+      setUnreadCounts(prev => ({
+        ...prev,
+        [activeChatId]: 0
+      }));
+    }
+
     return () => {
       supabase.removeChannel(presenceChannel);
       supabase.removeChannel(friendshipChannel);
+      supabase.removeChannel(messageChannel);
     };
-  }, [supabase, userId, router]);
+  }, [supabase, userId, router, pathname]);
 
   if (friends.length === 0) {
     return (
@@ -153,8 +197,13 @@ export function FriendList({
                     "font-semibold text-sm truncate transition-colors",
                     pathname === `/chat/${friend.id}` ? "text-blue-600" : "text-neutral-900"
                   )}>
-                    {friend.username}
+                    {friend.display_name || friend.username}
                   </p>
+                  {unreadCounts[friend.id] > 0 && (
+                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white animate-in zoom-in duration-300">
+                      {unreadCounts[friend.id]}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-neutral-500 truncate">
                   {onlineUsers.has(friend.id) ? "Online" : "Offline"}
