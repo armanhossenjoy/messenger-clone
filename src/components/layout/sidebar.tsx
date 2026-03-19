@@ -28,6 +28,13 @@ export async function Sidebar({ user, profile }: { user: User, profile: Record<s
     ...(friendships2?.map(f => f.friend) || [])
   ];
 
+  // Fetch pending requests count
+  const { count: pendingCount } = await supabase
+    .from("friendships")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id2", user.id)
+    .eq("status", "pending");
+
   return (
     <div className="w-full h-full flex flex-col bg-neutral-50/30">
       {/* Header */}
@@ -47,7 +54,7 @@ export async function Sidebar({ user, profile }: { user: User, profile: Record<s
         <SignOutButton />
       </div>
 
-      <SidebarNav />
+      <SidebarNav initialRequestCount={pendingCount || 0} userId={user.id} />
 
       {/* Search */}
       <div className="p-4 py-3 bg-white">
