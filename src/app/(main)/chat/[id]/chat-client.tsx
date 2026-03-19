@@ -175,8 +175,8 @@ export default function ChatClient({
         const state = presenceChannel.presenceState();
         let found = false;
         for (const key in state) {
-          const presences = state[key] as any;
-          if (presences.some((p: any) => p.user_id === otherUser.id)) {
+          const presences = state[key] as unknown as { user_id: string }[];
+          if (presences.some((p) => p.user_id === otherUser.id)) {
             found = true;
             break;
           }
