@@ -19,8 +19,8 @@ export function MainResponsiveLayout({
       {/* Sidebar Container */}
       <aside className={cn(
         "h-full border-r border-neutral-200 transition-all duration-300 ease-in-out shrink-0",
-        // On mobile: show only if not on a chat page. On desktop: always show and set width.
-        isChatPage ? "hidden md:flex md:w-80 lg:w-96" : "flex w-full md:w-80 lg:w-96"
+        // On mobile: show only if not on a chat or discover page. On desktop: always show and set width.
+        (isChatPage || isDiscoverPage) ? "hidden md:flex md:w-80 lg:w-96" : "flex w-full md:w-80 lg:w-96"
       )}>
         {sidebar}
       </aside>
