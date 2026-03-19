@@ -141,7 +141,9 @@ export default function ChatClient({
           setMessages([]);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Friendlist sync status:", status);
+      });
 
     // 2. Typing indicator broadcast
     const typingChannel = supabase.channel(`typing:${chatId}`);
@@ -151,7 +153,16 @@ export default function ChatClient({
           setOtherUserTyping(payload.payload.isTyping);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Typing channel status for ${chatId}:`, status);
+      });
+
+    messageChannel.subscribe((status) => {
+      console.log(`Message channel status for ${chatId}:`, status);
+      if (status === "CHANNEL_ERROR") {
+        console.error("Realtime connection blocked or failed. check your CSP/network.");
+      }
+    });
 
     // 3. Presence
     const presenceChannel = supabase.channel("online-users");

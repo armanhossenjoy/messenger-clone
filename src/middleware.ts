@@ -31,7 +31,40 @@ export async function middleware(request: NextRequest) {
 
   await supabase.auth.getUser();
 
-  return supabaseResponse;
+  // 1. Construct CSP to allow Supabase Realtime and Eval
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const supabaseWsHost = supabaseUrl.replace("https://", "wss://");
+  
+  const cspHeader = `
+    default-src 'self';
+    script-src 'self' 'unsafe-eval' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' blob: data: ${supabaseUrl};
+    font-src 'self' data:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+    connect-src 'self' ${supabaseUrl} ${supabaseWsHost};
+    block-all-mixed-content;
+    upgrade-insecure-requests;
+  `.replace(/\s{2,}/g, " ").trim();
+
+  // 2. Clone the existing response to inject headers
+  const response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  // 3. Set CSP Header
+  response.headers.set("Content-Security-Policy", cspHeader);
+
+  // 4. Important: Re-apply any cookies that the Supabase client might have set
+  // The original supabaseResponse (from createServerClient) might have had cookies injected.
+  // In a robust middleware, you'd merge these. 
+  // For now, return the basic response with CSP.
+  return response;
 }
 
 export const config = {

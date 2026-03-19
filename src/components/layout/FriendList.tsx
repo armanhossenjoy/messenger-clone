@@ -94,7 +94,9 @@ export function FriendList({
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("FriendList real-time status:", status);
+      });
 
     return () => {
       supabase.removeChannel(presenceChannel);
