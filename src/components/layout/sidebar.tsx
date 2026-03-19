@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { SidebarNav } from "./SidebarNav";
+import { FriendList } from "./FriendList";
 
 export async function Sidebar({ user, profile }: { user: User, profile: Record<string, string> | null }) {
   const supabase = createClient();
@@ -61,49 +62,8 @@ export async function Sidebar({ user, profile }: { user: User, profile: Record<s
       </div>
 
       {/* Chat List */}
-      <div className="flex-1 overflow-y-auto bg-white flex flex-col">
-        {friends.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-            <div className="w-12 h-12 bg-neutral-50 rounded-full flex items-center justify-center mb-3 border border-neutral-100">
-              <MessageCircle className="w-5 h-5 text-neutral-400" />
-            </div>
-            <h3 className="text-sm font-semibold text-neutral-900 leading-none mb-1.5">No chats yet</h3>
-            <p className="text-xs text-neutral-500 max-w-[200px] leading-relaxed">
-              Go to Discover to find friends and start chatting.
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-neutral-100 px-2 py-2">
-            {friends.map((friend: { id: string; username: string; avatar_url: string }) => (
-              <Link 
-                key={friend.id} 
-                href={`/chat/${friend.id}`}
-                className="flex items-center gap-3 p-3 rounded-xl hover:bg-neutral-50 transition-colors"
-              >
-                <div className="relative">
-                  <Avatar className="w-12 h-12 border border-neutral-100">
-                    <AvatarImage src={friend.avatar_url || undefined} />
-                    <AvatarFallback className="bg-neutral-100 text-neutral-600">
-                      {friend.username?.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  {/* We will add presence indicator here later */}
-                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-neutral-300 border-2 border-white rounded-full"></div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-semibold text-sm text-neutral-900 truncate">
-                      {friend.username}
-                    </p>
-                  </div>
-                  <p className="text-xs text-neutral-500 truncate">
-                    Tap to start chatting
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
+      <div className="flex-1 overflow-y-auto bg-white flex flex-col min-h-0">
+        <FriendList initialFriends={friends as any} userId={user.id} />
       </div>
     </div>
   );

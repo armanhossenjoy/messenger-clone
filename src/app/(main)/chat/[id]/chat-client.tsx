@@ -55,13 +55,16 @@ export default function ChatClient({
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `sender_id=eq.${otherUser.id}`,
+          filter: `receiver_id=eq.${currentUserId}`,
         },
         (payload) => {
-          setMessages((prev) => {
-            if (prev.find(m => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new as Message];
-          });
+          const newMessage = payload.new as Message;
+          if (newMessage.sender_id === otherUser.id) {
+            setMessages((prev) => {
+              if (prev.find(m => m.id === newMessage.id)) return prev;
+              return [...prev, newMessage];
+            });
+          }
         }
       )
       .subscribe();

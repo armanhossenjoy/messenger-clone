@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,52 @@ export default function DiscoverClient({
   
   const supabase = createClient();
   const router = useRouter();
+
+  useEffect(() => {
+    // Subscribe to incoming friend requests
+    const channel = supabase.channel(`incoming-requests-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "friendships",
+          filter: `user_id2=eq.${userId}`,
+        },
+        async (payload) => {
+          // Fetch the profile of the person who sent the request
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", payload.new.user_id1)
+            .single();
+            
+          if (profile) {
+            setPendingRequests(prev => [
+              { id: payload.new.id, profile },
+              ...prev
+            ]);
+            toast.info(`New friend request from ${profile.username}!`);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "friendships",
+        },
+        (payload) => {
+          setPendingRequests(prev => prev.filter(req => req.id !== payload.old.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, userId]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
