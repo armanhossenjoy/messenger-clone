@@ -27,7 +27,7 @@ export function FriendList({
 
   useEffect(() => {
     const fetchUnreadCounts = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("messages")
         .select("sender_id")
         .eq("receiver_id", userId)

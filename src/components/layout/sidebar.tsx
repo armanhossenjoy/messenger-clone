@@ -32,8 +32,8 @@ export async function Sidebar({ user, profile }: { user: User, profile: Profile 
   ]);
 
   const friends = [
-    ...(friends1Res.data?.map((f: any) => f.friend as Profile) || []),
-    ...(friends2Res.data?.map((f: any) => f.friend as Profile) || [])
+    ...(friends1Res.data?.map((f: any) => f.friend as unknown as Profile) || []),
+    ...(friends2Res.data?.map((f: any) => f.friend as unknown as Profile) || [])
   ];
 
   const pendingCount = pendingRes.count;
@@ -57,7 +57,7 @@ export async function Sidebar({ user, profile }: { user: User, profile: Profile 
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto bg-white flex flex-col min-h-0">
-        <FriendList initialFriends={friends as { id: string; username: string; avatar_url: string | null }[]} userId={user.id} />
+        <FriendList initialFriends={friends as Profile[]} userId={user.id} />
       </div>
     </div>
   );

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Profile } from "@/lib/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { Settings } from "lucide-react";
 import { ProfileEditModal } from "@/components/profile/ProfileEditModal";
 import { SignOutButton } from "@/components/auth/SignOutButton";
