@@ -6,7 +6,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { usePathname } from "next/navigation";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -65,7 +64,6 @@ export function FriendList({
         async (payload) => {
           // Handle DELETION (Unfriend/Block)
           if (payload.eventType === "DELETE") {
-            const oldId = payload.old.id;
             // Since we can't easily know which friend was deleted from payload.old without full replication,
             // the safest robust way is to mark for refresh or filter if we find it.
             // Actually, just refetching is best for the sidebar.
@@ -102,7 +100,7 @@ export function FriendList({
       supabase.removeChannel(presenceChannel);
       supabase.removeChannel(friendshipChannel);
     };
-  }, [supabase, userId]);
+  }, [supabase, userId, router]);
 
   if (friends.length === 0) {
     return (

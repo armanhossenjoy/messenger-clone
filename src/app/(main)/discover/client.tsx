@@ -134,7 +134,7 @@ export default function DiscoverClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, userId]);
+  }, [supabase, userId, router]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
