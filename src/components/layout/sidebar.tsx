@@ -36,6 +36,21 @@ export async function Sidebar({ user, profile }: { user: User, profile: Profile 
     ...(friends2Res.data?.map((f) => (f as unknown as { friend: Profile }).friend) || [])
   ];
 
+  // Fetch latest messages to show previews
+  const { data: latestMessages } = await supabase
+    .from("messages")
+    .select("*")
+    .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+    .order("created_at", { ascending: false });
+
+  const friendsWithLastMessage = friends.map(friend => {
+    const lastMsg = latestMessages?.find(
+      m => (m.sender_id === friend.id && m.receiver_id === user.id) || 
+           (m.sender_id === user.id && m.receiver_id === friend.id)
+    );
+    return { ...friend, lastMessage: lastMsg || null };
+  });
+
   const pendingCount = pendingRes.count;
 
   return (
@@ -57,7 +72,7 @@ export async function Sidebar({ user, profile }: { user: User, profile: Profile 
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto bg-white flex flex-col min-h-0">
-        <FriendList initialFriends={friends as Profile[]} userId={user.id} />
+        <FriendList initialFriends={friendsWithLastMessage as any} userId={user.id} />
       </div>
     </div>
   );

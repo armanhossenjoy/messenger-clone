@@ -9,16 +9,17 @@ import { clsx } from "clsx";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { Profile } from "@/lib/types";
+import { Profile, Message } from "@/lib/types";
+type Friend = Profile & { lastMessage: Message | null };
 
 export function FriendList({ 
   initialFriends, 
   userId 
 }: { 
-  initialFriends: Profile[], 
+  initialFriends: Friend[], 
   userId: string 
 }) {
-  const [friends, setFriends] = useState<Profile[]>(initialFriends);
+  const [friends, setFriends] = useState<Friend[]>(initialFriends);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const supabase = createClient();
@@ -95,7 +96,7 @@ export function FriendList({
               if (profile) {
                 setFriends(prev => {
                   if (prev.find(f => f.id === profile.id)) return prev;
-                  return [profile, ...prev];
+                  return [{ ...profile, lastMessage: null } as Friend, ...prev];
                 });
               }
             } else if (rel.status === "blocked" || rel.status === "pending") {
@@ -109,36 +110,64 @@ export function FriendList({
         console.log("FriendList real-time status:", status);
       });
 
-    // 3. Messages Subscription (Unread counts)
-    const messageChannel = supabase.channel("sidebar-unread")
+    // 3. Messages Subscription (Unread counts & Last Message)
+    const messageChannel = supabase.channel("sidebar-messages")
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "messages",
+        },
+        (payload) => {
+          const msg = payload.new as Message;
+          
+          // Update last message preview for either sender or receiver (if they are a friend)
+          const otherId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+          
+          setFriends(prev => prev.map(f => {
+            if (f.id === otherId) {
+              return { ...f, lastMessage: msg };
+            }
+            return f;
+          }));
+
+          // Update unread count if we are the receiver
+          if (msg.receiver_id === userId) {
+            const isChatOpen = pathname === `/chat/${msg.sender_id}`;
+            if (!isChatOpen) {
+              setUnreadCounts(prev => ({
+                ...prev,
+                [msg.sender_id]: (prev[msg.sender_id] || 0) + 1
+              }));
+            }
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
           filter: `receiver_id=eq.${userId}`,
         },
         (payload) => {
-          const msg = payload.new;
-          const isChatOpen = pathname === `/chat/${msg.sender_id}`;
-          if (!isChatOpen) {
+          const msg = payload.new as Message;
+          if (msg.status === "seen") {
             setUnreadCounts(prev => ({
               ...prev,
-              [msg.sender_id]: (prev[msg.sender_id] || 0) + 1
+              [msg.sender_id]: 0
             }));
           }
         }
       )
       .subscribe();
 
-    // 4. Clear unread when pathname changes to a specific chat
+    // 4. Clear unread when pathname changes
     const activeChatId = pathname.split("/").pop();
     if (activeChatId && pathname.includes("/chat/")) {
-      setUnreadCounts(prev => ({
-        ...prev,
-        [activeChatId]: 0
-      }));
+      setUnreadCounts(prev => ({ ...prev, [activeChatId]: 0 }));
     }
 
     return () => {
@@ -179,11 +208,11 @@ export function FriendList({
                 pathname === `/chat/${friend.id}` ? "bg-blue-50/50" : "hover:bg-neutral-50"
               )}
             >
-              <div className="relative">
+              <div className="relative shrink-0">
                 <Avatar className="w-12 h-12 border border-neutral-100 group-hover:scale-105 transition-transform">
                   <AvatarImage src={friend.avatar_url || undefined} />
                   <AvatarFallback className="bg-neutral-100 text-neutral-600">
-                    {friend.username?.charAt(0).toUpperCase()}
+                    {(friend.display_name || friend.username).charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className={clsx(
@@ -192,22 +221,34 @@ export function FriendList({
                 )}></div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
                   <p className={clsx(
-                    "font-semibold text-sm truncate transition-colors",
+                    "font-bold text-sm truncate transition-colors",
                     pathname === `/chat/${friend.id}` ? "text-blue-600" : "text-neutral-900"
                   )}>
                     {friend.display_name || friend.username}
                   </p>
                   {unreadCounts[friend.id] > 0 && (
-                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white animate-in zoom-in duration-300">
+                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-bold text-white shadow-sm shadow-blue-200">
                       {unreadCounts[friend.id]}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-neutral-500 truncate">
-                  {onlineUsers.has(friend.id) ? "Online" : "Offline"}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className={clsx(
+                    "text-xs truncate transition-colors",
+                    unreadCounts[friend.id] > 0 ? "text-neutral-900 font-bold" : "text-neutral-500"
+                  )}>
+                    {friend.lastMessage?.image_url 
+                      ? "📷 Image" 
+                      : (friend.lastMessage?.content || (onlineUsers.has(friend.id) ? "Active now" : "Offline"))}
+                  </p>
+                  {friend.lastMessage && (
+                    <span className="text-[10px] text-neutral-400 shrink-0">
+                      {new Date(friend.lastMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
               </div>
             </Link>
           </motion.div>
