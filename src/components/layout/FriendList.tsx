@@ -7,6 +7,7 @@ import { MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Friend = {
   id: string;
@@ -133,39 +134,50 @@ export function FriendList({
 
   return (
     <div className="divide-y divide-neutral-100 px-2 py-2">
-      {friends.map((friend) => (
-        <Link 
-          key={friend.id} 
-          href={`/chat/${friend.id}`}
-          className={clsx(
-            "flex items-center gap-3 p-3 rounded-xl transition-colors",
-            pathname === `/chat/${friend.id}` ? "bg-neutral-100" : "hover:bg-neutral-50"
-          )}
-        >
-          <div className="relative">
-            <Avatar className="w-12 h-12 border border-neutral-100">
-              <AvatarImage src={friend.avatar_url || undefined} />
-              <AvatarFallback className="bg-neutral-100 text-neutral-600">
-                {friend.username?.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className={clsx(
-              "absolute bottom-0.5 right-0.5 w-3 h-3 border-2 border-white rounded-full",
-              onlineUsers.has(friend.id) ? "bg-green-500" : "bg-neutral-300"
-            )}></div>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-1">
-              <p className="font-semibold text-sm text-neutral-900 truncate">
-                {friend.username}
-              </p>
-            </div>
-            <p className="text-xs text-neutral-500 truncate">
-              {onlineUsers.has(friend.id) ? "Online" : "Offline"}
-            </p>
-          </div>
-        </Link>
-      ))}
+      <AnimatePresence>
+        {friends.map((friend, index) => (
+          <motion.div
+            key={friend.id}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.05 }}
+          >
+            <Link 
+              href={`/chat/${friend.id}`}
+              className={clsx(
+                "flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group",
+                pathname === `/chat/${friend.id}` ? "bg-blue-50/50" : "hover:bg-neutral-50"
+              )}
+            >
+              <div className="relative">
+                <Avatar className="w-12 h-12 border border-neutral-100 group-hover:scale-105 transition-transform">
+                  <AvatarImage src={friend.avatar_url || undefined} />
+                  <AvatarFallback className="bg-neutral-100 text-neutral-600">
+                    {friend.username?.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className={clsx(
+                  "absolute bottom-0.5 right-0.5 w-3.5 h-3.5 border-2 border-white rounded-full transition-colors",
+                  onlineUsers.has(friend.id) ? "bg-green-500 animate-pulse-subtle" : "bg-neutral-300"
+                )}></div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <p className={clsx(
+                    "font-semibold text-sm truncate transition-colors",
+                    pathname === `/chat/${friend.id}` ? "text-blue-600" : "text-neutral-900"
+                  )}>
+                    {friend.username}
+                  </p>
+                </div>
+                <p className="text-xs text-neutral-500 truncate">
+                  {onlineUsers.has(friend.id) ? "Online" : "Offline"}
+                </p>
+              </div>
+            </Link>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }

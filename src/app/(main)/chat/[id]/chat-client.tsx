@@ -7,6 +7,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Info, Send, Phone, MoreVertical, Paperclip, ChevronLeft, UserMinus, Ban } from "lucide-react";
 import { clsx } from "clsx";
+import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -282,8 +284,9 @@ export default function ChatClient({
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white relative">
+      <LayoutGroup>
       {/* Header */}
-      <div className="h-16 border-b border-neutral-200 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 z-10">
+      <div className="h-16 border-b border-neutral-200/60 flex items-center justify-between px-4 md:px-6 glass sticky top-0 z-20 shrink-0">
         <div className="flex items-center gap-2 md:gap-3">
           <Link href="/" className="md:hidden -ml-1 p-1 text-neutral-500 hover:text-neutral-900 transition-colors">
             <ChevronLeft className="w-6 h-6" />
@@ -332,33 +335,45 @@ export default function ChatClient({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-neutral-50/30">
-        {messages.map((message) => {
-          const isOwn = message.sender_id === currentUserId;
-          return (
-            <div key={message.id} className={clsx("flex flex-col", isOwn ? "items-end" : "items-start")}>
-              <div 
-                className={clsx(
-                  "max-w-[70%] px-4 py-2 rounded-2xl",
-                  isOwn 
-                    ? "bg-blue-500 text-white rounded-br-sm" 
-                    : "bg-white border border-neutral-200 text-neutral-900 rounded-bl-sm shadow-sm"
-                )}
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-neutral-50/30 scroll-smooth">
+        <AnimatePresence initial={false}>
+          {messages.map((message) => {
+            const isOwn = message.sender_id === currentUserId;
+            return (
+              <motion.div 
+                key={message.id}
+                layout
+                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className={clsx("flex flex-col", isOwn ? "items-end" : "items-start")}
               >
-                {message.image_url && (
-                  <div className="mb-2 relative rounded-xl overflow-hidden bg-neutral-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={message.image_url || undefined} alt="Shared image" className="max-w-full max-h-[300px] object-contain" />
-                  </div>
-                )}
-                {message.content && <p className="text-[15px] leading-relaxed break-words">{message.content}</p>}
-              </div>
-              <span className="text-[10px] text-neutral-400 mt-1 mx-1">
-                {mounted ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "..."}
-              </span>
-            </div>
-          );
-        })}
+                <div 
+                  className={clsx(
+                    "max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl shadow-sm transition-all duration-200",
+                    isOwn 
+                      ? "bg-blue-500 text-white rounded-br-sm highlight-white/10" 
+                      : "bg-white border border-neutral-200/60 text-neutral-900 rounded-bl-sm"
+                  )}
+                >
+                  {message.image_url && (
+                    <div className="mb-2 relative rounded-xl overflow-hidden bg-neutral-100 group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img 
+                        src={message.image_url || undefined} 
+                        alt="Shared image" 
+                        className="max-w-full max-h-[300px] object-contain group-hover:scale-[1.02] transition-transform duration-300" 
+                      />
+                    </div>
+                  )}
+                  {message.content && <p className="text-[15px] leading-relaxed break-words">{message.content}</p>}
+                </div>
+                <span className="text-[10px] text-neutral-400 mt-1.5 mx-1 font-medium tracking-tight">
+                  {mounted ? format(new Date(message.created_at), "p") : "..."}
+                </span>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
         {otherUserTyping && (
           <div className="flex items-start">
             <div className="bg-white border border-neutral-200 px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm flex gap-1 items-center">
@@ -409,6 +424,7 @@ export default function ChatClient({
           </Button>
         </form>
       </div>
+    </LayoutGroup>
     </div>
   );
 }

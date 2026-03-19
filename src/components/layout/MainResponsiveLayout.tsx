@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function MainResponsiveLayout({ 
   sidebar, 
@@ -26,13 +27,22 @@ export function MainResponsiveLayout({
       </aside>
 
       {/* Main Content Container */}
-      <main className={cn(
-        "flex-1 flex flex-col bg-neutral-50/50 relative h-full",
-        // On mobile: hide if we are in the "friend list" view (the home page).
-        !isChatPage && !isDiscoverPage ? "hidden md:flex" : "flex"
-      )}>
-        {children}
-      </main>
+      <AnimatePresence mode="wait">
+        <motion.main 
+          key={pathname}
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -10 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className={cn(
+            "flex-1 flex flex-col bg-neutral-50/50 relative h-full",
+            // On mobile: hide if we are in the "friend list" view (the home page).
+            !isChatPage && !isDiscoverPage ? "hidden md:flex" : "flex"
+          )}
+        >
+          {children}
+        </motion.main>
+      </AnimatePresence>
     </div>
   );
 }

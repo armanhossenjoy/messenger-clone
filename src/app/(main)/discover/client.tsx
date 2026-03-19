@@ -9,6 +9,7 @@ import { Search, UserPlus, Check, X, Clock, ChevronLeft, Ban } from "lucide-reac
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
 type Profile = {
@@ -242,43 +243,52 @@ export default function DiscoverClient({
             {results.length === 0 && query && !loading && (
               <p className="text-neutral-500 text-sm">No users found.</p>
             )}
-            {results.map(profile => {
-              const isFriend = friendIds.has(profile.id);
-              const isSent = sentRequestIds.has(profile.id);
-              
-              return (
-                <Card key={profile.id} className="p-4 flex items-center justify-between border-neutral-200 shadow-sm transition-all hover:border-neutral-300">
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarImage src={profile.avatar_url || undefined} />
-                      <AvatarFallback>{profile.username?.charAt(0).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold">{profile.username}</p>
-                      <p className="text-xs text-neutral-500">{profile.unique_id}</p>
-                    </div>
-                  </div>
-                  
-                  {isFriend ? (
-                    <Button variant="secondary" size="sm" disabled>
-                      <Check className="w-4 h-4 mr-2" /> Friends
-                    </Button>
-                  ) : isSent ? (
-                    <Button variant="outline" size="sm" disabled>
-                      <Clock className="w-4 h-4 mr-2" /> Pending
-                    </Button>
-                  ) : blockedUserIds.has(profile.id) ? (
-                    <Button variant="outline" size="sm" disabled className="text-red-500 border-red-200 bg-red-50">
-                      <Ban className="w-4 h-4 mr-2" /> Blocked
-                    </Button>
-                  ) : (
-                    <Button size="sm" onClick={() => sendRequest(profile.id)}>
-                      <UserPlus className="w-4 h-4 mr-2" /> Add Friend
-                    </Button>
-                  )}
-                </Card>
-              );
-            })}
+            <AnimatePresence>
+              {results.map((profile, index) => {
+                const isFriend = friendIds.has(profile.id);
+                const isSent = sentRequestIds.has(profile.id);
+                
+                return (
+                  <motion.div
+                    key={profile.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <Card className="p-4 flex items-center justify-between border-neutral-200/60 shadow-sm transition-all hover:border-blue-200 hover:shadow-md">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={profile.avatar_url || undefined} />
+                          <AvatarFallback>{profile.username?.charAt(0).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold">{profile.username}</p>
+                          <p className="text-xs text-neutral-500">{profile.unique_id}</p>
+                        </div>
+                      </div>
+                      
+                      {isFriend ? (
+                        <Button variant="secondary" size="sm" disabled>
+                          <Check className="w-4 h-4 mr-2" /> Friends
+                        </Button>
+                      ) : isSent ? (
+                        <Button variant="outline" size="sm" disabled>
+                          <Clock className="w-4 h-4 mr-2" /> Pending
+                        </Button>
+                      ) : blockedUserIds.has(profile.id) ? (
+                        <Button variant="outline" size="sm" disabled className="text-red-500 border-red-200 bg-red-50">
+                          <Ban className="w-4 h-4 mr-2" /> Blocked
+                        </Button>
+                      ) : (
+                        <Button size="sm" onClick={() => sendRequest(profile.id)}>
+                          <UserPlus className="w-4 h-4 mr-2" /> Add Friend
+                        </Button>
+                      )}
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
           </div>
         </section>
 
