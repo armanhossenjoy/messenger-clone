@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, UserPlus, Check, X, Clock } from "lucide-react";
+import { Search, UserPlus, Check, X, Clock, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import Link from "next/link";
 
 type Profile = {
   id: string;
@@ -115,7 +116,16 @@ export default function DiscoverClient({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col h-full bg-white md:bg-transparent">
+      {/* Mobile Header */}
+      <div className="md:hidden h-16 flex items-center px-4 border-b border-neutral-200 bg-white sticky top-0 z-10 shrink-0">
+        <Link href="/" className="-ml-2 p-2 text-neutral-500 hover:text-neutral-900 transition-colors">
+          <ChevronLeft className="w-6 h-6" />
+        </Link>
+        <h1 className="text-lg font-bold text-neutral-900 ml-1">Discover</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">
       {/* Pending Requests Section */}
       {pendingRequests.length > 0 && (
         <section>
@@ -202,6 +212,7 @@ export default function DiscoverClient({
           })}
         </div>
       </section>
+      </div>
     </div>
   );
 }

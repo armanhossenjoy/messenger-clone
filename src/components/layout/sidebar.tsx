@@ -29,7 +29,7 @@ export async function Sidebar({ user, profile }: { user: User, profile: Record<s
   ];
 
   return (
-    <div className="w-80 h-full flex flex-col bg-neutral-50/30 border-r border-neutral-200 shrink-0">
+    <div className="w-full h-full flex flex-col bg-neutral-50/30">
       {/* Header */}
       <div className="p-4 flex items-center justify-between border-b border-neutral-200 bg-white">
         <div className="flex items-center gap-3">

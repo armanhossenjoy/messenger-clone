@@ -5,9 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Info, Send, Phone, MoreVertical, Paperclip } from "lucide-react";
+import { Info, Send, Phone, MoreVertical, Paperclip, ChevronLeft } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
+import Link from "next/link";
 
 type Message = {
   id: string;
@@ -222,8 +223,11 @@ export default function ChatClient({
   return (
     <div className="flex-1 flex flex-col h-full bg-white relative">
       {/* Header */}
-      <div className="h-16 border-b border-neutral-200 flex items-center justify-between px-6 bg-white shrink-0 z-10">
-        <div className="flex items-center gap-3">
+      <div className="h-16 border-b border-neutral-200 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 z-10">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Link href="/" className="md:hidden -ml-1 p-1 text-neutral-500 hover:text-neutral-900 transition-colors">
+            <ChevronLeft className="w-6 h-6" />
+          </Link>
           <div className="relative">
             <Avatar className="w-10 h-10 border border-neutral-100">
               <AvatarImage src={otherUser.avatar_url || undefined} />

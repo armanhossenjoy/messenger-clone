@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
+import { MainResponsiveLayout } from "@/components/layout/MainResponsiveLayout";
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -17,11 +18,8 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     .single();
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden">
-      <Sidebar user={user} profile={profile} />
-      <main className="flex-1 flex flex-col bg-neutral-50/50 relative">
-        {children}
-      </main>
-    </div>
+    <MainResponsiveLayout sidebar={<Sidebar user={user} profile={profile} />}>
+      {children}
+    </MainResponsiveLayout>
   );
 }
