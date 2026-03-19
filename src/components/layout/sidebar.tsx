@@ -32,8 +32,8 @@ export async function Sidebar({ user, profile }: { user: User, profile: Profile 
   ]);
 
   const friends = [
-    ...(friends1Res.data?.map((f: any) => f.friend as unknown as Profile) || []),
-    ...(friends2Res.data?.map((f: any) => f.friend as unknown as Profile) || [])
+    ...(friends1Res.data?.map((f) => (f as unknown as { friend: Profile }).friend) || []),
+    ...(friends2Res.data?.map((f) => (f as unknown as { friend: Profile }).friend) || [])
   ];
 
   const pendingCount = pendingRes.count;
