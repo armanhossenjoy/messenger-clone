@@ -7,61 +7,53 @@ export default async function DiscoverPage() {
 
   if (!user) return null;
 
-  // Get pending friend requests received by the current user
-  const { data: pendingRequests } = await supabase
+  // Fetch all relevant relationships in one query to avoid multiple round-trips
+  const { data: allRelationships } = await supabase
     .from("friendships")
-    .select("*, profile:profiles!user_id1(*)") // get the profile of the sender
-    .eq("user_id2", user.id)
-    .eq("status", "pending");
+    .select(`
+      *,
+      sender:profiles!user_id1(*),
+      receiver:profiles!user_id2(*)
+    `)
+    .or(`user_id1.eq.${user.id},user_id2.eq.${user.id}`);
 
-  // Get sent pending requests (to show "Requested")
-  const { data: sentRequests } = await supabase
-    .from("friendships")
-    .select("user_id2")
-    .eq("user_id1", user.id)
-    .eq("status", "pending");
+  const relationships = allRelationships || [];
 
-  // Get accepted friends
-  const { data: acceptedFriends1 } = await supabase
-    .from("friendships")
-    .select("user_id2")
-    .eq("user_id1", user.id)
-    .eq("status", "accepted");
-    
-  const { data: acceptedFriends2 } = await supabase
-    .from("friendships")
-    .select("user_id1")
-    .eq("user_id2", user.id)
-    .eq("status", "accepted");
+  // 1. Pending requests received by us (to accept/reject)
+  const pendingRequests = relationships.filter(r => 
+    r.user_id2 === user.id && r.status === "pending"
+  ).map(r => ({ ...r, profile: r.sender }));
 
-  // Get blocked users
-  const { data: blockedRelationships1 } = await supabase
-    .from("friendships")
-    .select("*, profile:profiles!user_id2(*)")
-    .eq("user_id1", user.id)
-    .eq("status", "blocked");
+  // 2. Sent pending requests (to show "Requested" status)
+  const sentRequestIds = new Set(
+    relationships
+      .filter(r => r.user_id1 === user.id && r.status === "pending")
+      .map(r => r.user_id2)
+  );
 
-  const { data: blockedRelationships2 } = await supabase
-    .from("friendships")
-    .select("*, profile:profiles!user_id1(*)")
-    .eq("user_id2", user.id)
-    .eq("status", "blocked");
+  // 3. Accepted friends
+  const friendIds = new Set(
+    relationships
+      .filter(r => r.status === "accepted")
+      .map(r => r.user_id1 === user.id ? r.user_id2 : r.user_id1)
+  );
 
-  const blockedUsers = [
-    ...(blockedRelationships1?.map(r => ({ id: r.id, profile: r.profile })) || []),
-    ...(blockedRelationships2?.map(r => ({ id: r.id, profile: r.profile })) || [])
-  ];
+  // 4. Blocked users
+  const blockedUsers = relationships
+    .filter(r => r.status === "blocked")
+    .map(r => {
+      const isSender = r.user_id1 === user.id;
+      return { 
+        id: r.id, 
+        profile: isSender ? r.receiver : r.sender 
+      };
+    });
 
-  const blockedUserIds = new Set([
-    ...(blockedRelationships1?.map(r => r.user_id2) || []),
-    ...(blockedRelationships2?.map(r => r.user_id1) || [])
-  ]);
-
-  const sentRequestIds = new Set(sentRequests?.map(r => r.user_id2) || []);
-  const friendIds = new Set([
-    ...(acceptedFriends1?.map(r => r.user_id2) || []),
-    ...(acceptedFriends2?.map(r => r.user_id1) || [])
-  ]);
+  const blockedUserIds = new Set(
+    relationships
+      .filter(r => r.status === "blocked")
+      .map(r => r.user_id1 === user.id ? r.user_id2 : r.user_id1)
+  );
 
   return (
     <div className="flex-1 overflow-y-auto">

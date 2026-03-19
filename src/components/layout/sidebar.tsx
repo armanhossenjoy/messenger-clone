@@ -10,30 +10,31 @@ import { FriendList } from "./FriendList";
 export async function Sidebar({ user, profile }: { user: User, profile: Record<string, string> | null }) {
   const supabase = createClient();
   
-  // Fetch accepted friends
-  const { data: friendships1 } = await supabase
-    .from("friendships")
-    .select("*, friend:profiles!user_id2(*)")
-    .eq("user_id1", user.id)
-    .eq("status", "accepted");
-    
-  const { data: friendships2 } = await supabase
-    .from("friendships")
-    .select("*, friend:profiles!user_id1(*)")
-    .eq("user_id2", user.id)
-    .eq("status", "accepted");
-    
+  // Fetch all sidebar data in parallel
+  const [friends1Res, friends2Res, pendingRes] = await Promise.all([
+    supabase
+      .from("friendships")
+      .select("*, friend:profiles!user_id2(*)")
+      .eq("user_id1", user.id)
+      .eq("status", "accepted"),
+    supabase
+      .from("friendships")
+      .select("*, friend:profiles!user_id1(*)")
+      .eq("user_id2", user.id)
+      .eq("status", "accepted"),
+    supabase
+      .from("friendships")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id2", user.id)
+      .eq("status", "pending")
+  ]);
+
   const friends = [
-    ...(friendships1?.map(f => f.friend) || []),
-    ...(friendships2?.map(f => f.friend) || [])
+    ...(friends1Res.data?.map(f => f.friend) || []),
+    ...(friends2Res.data?.map(f => f.friend) || [])
   ];
 
-  // Fetch pending requests count
-  const { count: pendingCount } = await supabase
-    .from("friendships")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id2", user.id)
-    .eq("status", "pending");
+  const pendingCount = pendingRes.count;
 
   return (
     <div className="w-full h-full flex flex-col bg-neutral-50/30">
