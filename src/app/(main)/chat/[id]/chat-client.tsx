@@ -47,6 +47,7 @@ export default function ChatClient({
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const chatId = [currentUserId, otherUser.id].sort().join("-");
 
@@ -84,6 +85,7 @@ export default function ChatClient({
 
   // Scroll to bottom
   useEffect(() => {
+    setMounted(true);
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, otherUserTyping]);
 
@@ -297,7 +299,7 @@ export default function ChatClient({
             <Info className="w-5 h-5" />
           </Button>
           <DropdownMenu>
-            <DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="hover:text-neutral-900">
                 <MoreVertical className="w-5 h-5" />
               </Button>
@@ -340,7 +342,7 @@ export default function ChatClient({
                 {message.content && <p className="text-[15px] leading-relaxed break-words">{message.content}</p>}
               </div>
               <span className="text-[10px] text-neutral-400 mt-1 mx-1">
-                {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {mounted ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "..."}
               </span>
             </div>
           );
