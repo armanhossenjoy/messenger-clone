@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, UserPlus, Check, X, Clock, ChevronLeft } from "lucide-react";
+import { Search, UserPlus, Check, X, Clock, ChevronLeft, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -26,11 +26,15 @@ type PendingRequest = {
 export default function DiscoverClient({ 
   userId, 
   initialPending,
+  initialBlocked = [],
+  blockedUserIds: initialBlockedIds = [],
   sentRequestIds: initialSent,
   friendIds: initialFriends
 }: { 
   userId: string, 
   initialPending: PendingRequest[],
+  initialBlocked?: { id: string; profile: Profile }[],
+  blockedUserIds?: string[],
   sentRequestIds: string[],
   friendIds: string[]
 }) {
@@ -38,11 +42,31 @@ export default function DiscoverClient({
   const [results, setResults] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>(initialPending);
+  const [blockedUsers, setBlockedUsers] = useState<{ id: string; profile: Profile }[]>(initialBlocked);
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set(initialBlockedIds));
   const [sentRequestIds, setSentRequestIds] = useState<Set<string>>(new Set(initialSent));
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set(initialFriends));
+  useEffect(() => {
+    setBlockedUserIds(new Set(blockedUsers.map(u => u.profile.id)));
+  }, [blockedUsers]);
   
   const supabase = createClient();
   const router = useRouter();
+
+  const handleUnblock = async (relationshipId: string) => {
+    const { error } = await supabase
+      .from("friendships")
+      .delete()
+      .eq("id", relationshipId);
+
+    if (error) {
+      toast.error("Failed to unblock user");
+    } else {
+      setBlockedUsers(prev => prev.filter(u => u.id !== relationshipId));
+      toast.success("User unblocked");
+      router.refresh();
+    }
+  };
 
   useEffect(() => {
     // Subscribe to incoming friend requests
@@ -56,7 +80,6 @@ export default function DiscoverClient({
           filter: `user_id2=eq.${userId}`,
         },
         async (payload) => {
-          // Fetch the profile of the person who sent the request
           const { data: profile } = await supabase
             .from("profiles")
             .select("*")
@@ -95,8 +118,6 @@ export default function DiscoverClient({
     if (!query.trim()) return;
     
     setLoading(true);
-    
-    // Search by username or unique_id
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
@@ -109,7 +130,6 @@ export default function DiscoverClient({
     } else {
       setResults(data || []);
     }
-    
     setLoading(false);
   };
 
@@ -136,7 +156,6 @@ export default function DiscoverClient({
         .from("friendships")
         .delete()
         .eq("id", requestId);
-      
       if (!error) {
         setPendingRequests(prev => prev.filter(r => r.id !== requestId));
         toast.success("Friend request rejected");
@@ -172,92 +191,122 @@ export default function DiscoverClient({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">
-      {/* Pending Requests Section */}
-      {pendingRequests.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider mb-4">Pending Requests</h2>
-          <div className="grid gap-4">
-            {pendingRequests.map(req => (
-              <Card key={req.id} className="p-4 flex items-center justify-between border-neutral-200 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarImage src={req.profile?.avatar_url || undefined} />
-                    <AvatarFallback>{req.profile?.username?.charAt(0).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-semibold">{req.profile?.username}</p>
-                    <p className="text-xs text-neutral-500">{req.profile?.unique_id}</p>
+        {/* Pending Requests Section */}
+        {pendingRequests.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider mb-4">Pending Requests</h2>
+            <div className="grid gap-4">
+              {pendingRequests.map(req => (
+                <Card key={req.id} className="p-4 flex items-center justify-between border-neutral-200 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <Avatar>
+                      <AvatarImage src={req.profile?.avatar_url || undefined} />
+                      <AvatarFallback>{req.profile?.username?.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold">{req.profile?.username}</p>
+                      <p className="text-xs text-neutral-500">{req.profile?.unique_id}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => handleRequest(req.id, req.profile.id, "accepted")}>
-                    <Check className="w-4 h-4 mr-1" /> Accept
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleRequest(req.id, req.profile.id, "rejected")}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </Card>
-            ))}
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => handleRequest(req.id, req.profile.id, "accepted")}>
+                      <Check className="w-4 h-4 mr-1" /> Accept
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleRequest(req.id, req.profile.id, "rejected")}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Search Section */}
+        <section>
+          <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider mb-4">Find Friends</h2>
+          <form onSubmit={handleSearch} className="flex gap-2 mb-6">
+            <Input 
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search by username or ID (e.g. johndoe#1234)" 
+              className="bg-white"
+            />
+            <Button type="submit" disabled={loading}>
+              <Search className="w-4 h-4 mr-2" />
+              Search
+            </Button>
+          </form>
+
+          <div className="grid gap-4">
+            {results.length === 0 && query && !loading && (
+              <p className="text-neutral-500 text-sm">No users found.</p>
+            )}
+            {results.map(profile => {
+              const isFriend = friendIds.has(profile.id);
+              const isSent = sentRequestIds.has(profile.id);
+              
+              return (
+                <Card key={profile.id} className="p-4 flex items-center justify-between border-neutral-200 shadow-sm transition-all hover:border-neutral-300">
+                  <div className="flex items-center gap-3">
+                    <Avatar>
+                      <AvatarImage src={profile.avatar_url || undefined} />
+                      <AvatarFallback>{profile.username?.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold">{profile.username}</p>
+                      <p className="text-xs text-neutral-500">{profile.unique_id}</p>
+                    </div>
+                  </div>
+                  
+                  {isFriend ? (
+                    <Button variant="secondary" size="sm" disabled>
+                      <Check className="w-4 h-4 mr-2" /> Friends
+                    </Button>
+                  ) : isSent ? (
+                    <Button variant="outline" size="sm" disabled>
+                      <Clock className="w-4 h-4 mr-2" /> Pending
+                    </Button>
+                  ) : blockedUserIds.has(profile.id) ? (
+                    <Button variant="outline" size="sm" disabled className="text-red-500 border-red-200 bg-red-50">
+                      <Ban className="w-4 h-4 mr-2" /> Blocked
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={() => sendRequest(profile.id)}>
+                      <UserPlus className="w-4 h-4 mr-2" /> Add Friend
+                    </Button>
+                  )}
+                </Card>
+              );
+            })}
           </div>
         </section>
-      )}
 
-      {/* Search Section */}
-      <section>
-        <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider mb-4">Find Friends</h2>
-        <form onSubmit={handleSearch} className="flex gap-2 mb-6">
-          <Input 
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search by username or ID (e.g. johndoe#1234)" 
-            className="bg-white"
-          />
-          <Button type="submit" disabled={loading}>
-            <Search className="w-4 h-4 mr-2" />
-            Search
-          </Button>
-        </form>
-
-        <div className="grid gap-4">
-          {results.length === 0 && query && !loading && (
-            <p className="text-neutral-500 text-sm">No users found.</p>
-          )}
-          {results.map(profile => {
-            const isFriend = friendIds.has(profile.id);
-            const isSent = sentRequestIds.has(profile.id);
-            
-            return (
-              <Card key={profile.id} className="p-4 flex items-center justify-between border-neutral-200 shadow-sm transition-all hover:border-neutral-300">
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarImage src={profile.avatar_url || undefined} />
-                    <AvatarFallback>{profile.username?.charAt(0).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-semibold">{profile.username}</p>
-                    <p className="text-xs text-neutral-500">{profile.unique_id}</p>
+        {/* Blocked Users Section */}
+        {blockedUsers.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider mb-4">Blocked Users</h2>
+            <div className="grid gap-4">
+              {blockedUsers.map(blocked => (
+                <Card key={blocked.id} className="p-4 flex items-center justify-between border-neutral-200 shadow-sm opacity-75">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="grayscale">
+                      <AvatarImage src={blocked.profile?.avatar_url || undefined} />
+                      <AvatarFallback>{blocked.profile?.username?.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-neutral-400 line-through">{blocked.profile?.username}</p>
+                      <p className="text-xs text-neutral-500">{blocked.profile?.unique_id}</p>
+                    </div>
                   </div>
-                </div>
-                
-                {isFriend ? (
-                  <Button variant="secondary" size="sm" disabled>
-                    <Check className="w-4 h-4 mr-2" /> Friends
+                  <Button variant="outline" size="sm" onClick={() => handleUnblock(blocked.id)}>
+                    Unblock
                   </Button>
-                ) : isSent ? (
-                  <Button variant="outline" size="sm" disabled>
-                    <Clock className="w-4 h-4 mr-2" /> Pending
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={() => sendRequest(profile.id)}>
-                    <UserPlus className="w-4 h-4 mr-2" /> Add Friend
-                  </Button>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      </section>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

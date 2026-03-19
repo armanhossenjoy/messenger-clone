@@ -34,6 +34,29 @@ export default async function DiscoverPage() {
     .eq("user_id2", user.id)
     .eq("status", "accepted");
 
+  // Get blocked users
+  const { data: blockedRelationships1 } = await supabase
+    .from("friendships")
+    .select("*, profile:profiles!user_id2(*)")
+    .eq("user_id1", user.id)
+    .eq("status", "blocked");
+
+  const { data: blockedRelationships2 } = await supabase
+    .from("friendships")
+    .select("*, profile:profiles!user_id1(*)")
+    .eq("user_id2", user.id)
+    .eq("status", "blocked");
+
+  const blockedUsers = [
+    ...(blockedRelationships1?.map(r => ({ id: r.id, profile: r.profile })) || []),
+    ...(blockedRelationships2?.map(r => ({ id: r.id, profile: r.profile })) || [])
+  ];
+
+  const blockedUserIds = new Set([
+    ...(blockedRelationships1?.map(r => r.user_id2) || []),
+    ...(blockedRelationships2?.map(r => r.user_id1) || [])
+  ]);
+
   const sentRequestIds = new Set(sentRequests?.map(r => r.user_id2) || []);
   const friendIds = new Set([
     ...(acceptedFriends1?.map(r => r.user_id2) || []),
@@ -42,11 +65,13 @@ export default async function DiscoverPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto p-8">
-        <h1 className="text-2xl font-semibold text-neutral-900 mb-6">Discover</h1>
+      <div className="max-w-3xl mx-auto p-4 md:p-8">
+        <h1 className="text-2xl font-semibold text-neutral-900 mb-6 hidden md:block">Discover</h1>
         <DiscoverClient 
           userId={user.id} 
           initialPending={pendingRequests || []}
+          initialBlocked={blockedUsers as any}
+          blockedUserIds={Array.from(blockedUserIds)}
           sentRequestIds={Array.from(sentRequestIds)}
           friendIds={Array.from(friendIds)}
         />

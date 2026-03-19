@@ -5,10 +5,18 @@ import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Info, Send, Phone, MoreVertical, Paperclip, ChevronLeft } from "lucide-react";
+import { Info, Send, Phone, MoreVertical, Paperclip, ChevronLeft, UserMinus, Ban } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 type Message = {
   id: string;
@@ -39,7 +47,40 @@ export default function ChatClient({
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  const router = useRouter();
   const chatId = [currentUserId, otherUser.id].sort().join("-");
+
+  const handleUnfriend = async () => {
+    const { error } = await supabase
+      .from("friendships")
+      .delete()
+      .or(`and(user_id1.eq.${currentUserId},user_id2.eq.${otherUser.id}),and(user_id1.eq.${otherUser.id},user_id2.eq.${currentUserId})`);
+
+    if (error) {
+      toast.error("Failed to unfriend");
+    } else {
+      toast.success("Unfriended");
+      router.push("/");
+      router.refresh();
+    }
+  };
+
+  const handleBlock = async () => {
+    // Determine which user is blocking. Actually, we update the status to 'blocked'.
+    // In our simplified schema, anyone in the friendship can set it to 'blocked'.
+    const { error } = await supabase
+      .from("friendships")
+      .update({ status: "blocked" })
+      .or(`and(user_id1.eq.${currentUserId},user_id2.eq.${otherUser.id}),and(user_id1.eq.${otherUser.id},user_id2.eq.${currentUserId})`);
+
+    if (error) {
+      toast.error("Failed to block user");
+    } else {
+      toast.success("User blocked");
+      router.push("/");
+      router.refresh();
+    }
+  };
 
   // Scroll to bottom
   useEffect(() => {
@@ -255,9 +296,24 @@ export default function ChatClient({
           <Button variant="ghost" size="icon" className="hover:text-neutral-900">
             <Info className="w-5 h-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="hover:text-neutral-900">
-            <MoreVertical className="w-5 h-5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <Button variant="ghost" size="icon" className="hover:text-neutral-900">
+                <MoreVertical className="w-5 h-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={handleUnfriend} className="text-amber-600 focus:text-amber-600">
+                <UserMinus className="w-4 h-4 mr-2" />
+                Unfriend
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleBlock} className="text-red-600 focus:text-red-600 font-medium">
+                <Ban className="w-4 h-4 mr-2" />
+                Block User
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
