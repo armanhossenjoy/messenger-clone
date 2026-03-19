@@ -106,7 +106,7 @@ export default function ChatClient({
   }, [messages, otherUserTyping]);
 
   useEffect(() => {
-    // 1. Messages Subscription
+    // 1. Messages Subscription (Broader to catch all chat activity)
     const messageChannel = supabase.channel(`messages:${chatId}`)
       .on(
         "postgres_changes",
@@ -114,16 +114,31 @@ export default function ChatClient({
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `receiver_id=eq.${currentUserId}`,
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          if (newMessage.sender_id === otherUser.id) {
+          // Check if this message belongs to our current chat
+          const isFromOther = newMessage.sender_id === otherUser.id && newMessage.receiver_id === currentUserId;
+          const isFromSelf = newMessage.sender_id === currentUserId && newMessage.receiver_id === otherUser.id;
+          
+          if (isFromOther || isFromSelf) {
             setMessages((prev) => {
               if (prev.find(m => m.id === newMessage.id)) return prev;
               return [...prev, newMessage];
             });
           }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "messages",
+        },
+        () => {
+          // If messages are deleted (e.g. unfriend/block), clear local state
+          setMessages([]);
         }
       )
       .subscribe();

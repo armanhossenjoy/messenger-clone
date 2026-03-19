@@ -7,6 +7,7 @@ import { MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Friend = {
@@ -28,6 +29,7 @@ export function FriendList({
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const supabase = createClient();
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     // 1. Presence Subscription
@@ -51,61 +53,45 @@ export function FriendList({
         }
       });
 
-    // 2. Friendships Subscription (New Friends)
+    // 2. Friendships Subscription (New Friends & Unfriends)
     const friendshipChannel = supabase.channel("friendship-updates")
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*", // Listen for ALL events (INSERT, UPDATE, DELETE)
           schema: "public",
           table: "friendships",
-          filter: `status=eq.accepted`,
         },
         async (payload) => {
-          const { user_id1, user_id2 } = payload.new;
-          const friendId = user_id1 === userId ? user_id2 : user_id1;
-          
-          if (user_id1 === userId || user_id2 === userId) {
-            // Fetch friend profile
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", friendId)
-              .single();
-            
-            if (profile) {
-              setFriends(prev => {
-                if (prev.find(f => f.id === profile.id)) return prev;
-                return [profile, ...prev];
-              });
-            }
+          // Handle DELETION (Unfriend/Block)
+          if (payload.eventType === "DELETE") {
+            const oldId = payload.old.id;
+            // Since we can't easily know which friend was deleted from payload.old without full replication,
+            // the safest robust way is to mark for refresh or filter if we find it.
+            // Actually, just refetching is best for the sidebar.
+            router.refresh();
+            return;
           }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "friendships",
-          filter: `status=eq.accepted`,
-        },
-        async (payload) => {
-          const { user_id1, user_id2 } = payload.new;
-          const friendId = user_id1 === userId ? user_id2 : user_id1;
-          
-          if (user_id1 === userId || user_id2 === userId) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", friendId)
-              .single();
-            
-            if (profile) {
-              setFriends(prev => {
-                if (prev.find(f => f.id === profile.id)) return prev;
-                return [profile, ...prev];
-              });
+
+          const rel = payload.new;
+          if (rel.user_id1 === userId || rel.user_id2 === userId) {
+            if (rel.status === "accepted") {
+              const friendId = rel.user_id1 === userId ? rel.user_id2 : rel.user_id1;
+              const { data: profile } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", friendId)
+                .single();
+              
+              if (profile) {
+                setFriends(prev => {
+                  if (prev.find(f => f.id === profile.id)) return prev;
+                  return [profile, ...prev];
+                });
+              }
+            } else if (rel.status === "blocked" || rel.status === "pending") {
+              // If it's not accepted anymore, remove from list
+              setFriends(prev => prev.filter(f => f.id !== rel.user_id1 && f.id !== rel.user_id2));
             }
           }
         }

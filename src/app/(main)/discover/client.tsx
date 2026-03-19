@@ -96,17 +96,39 @@ export default function DiscoverClient({
           }
         }
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "friendships",
-        },
-        (payload) => {
-          setPendingRequests(prev => prev.filter(req => req.id !== payload.old.id));
-        }
-      )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "friendships",
+          },
+          (payload) => {
+            const rel = payload.new;
+            if (rel.user_id2 === userId) {
+              // Someone accepted/modified a request sent to us
+              if (rel.status !== "pending") {
+                setPendingRequests(prev => prev.filter(req => req.id !== rel.id));
+              }
+            } else if (rel.user_id1 === userId) {
+              // We accepted/modified a request sent by us? Or it was accepted by them.
+              // Just refresh the router to get the new 'Friend' status in search results
+              router.refresh();
+            }
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "friendships",
+          },
+          (payload) => {
+            setPendingRequests(prev => prev.filter(req => req.id !== payload.old.id));
+            router.refresh();
+          }
+        )
       .subscribe();
 
     return () => {
