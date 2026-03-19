@@ -70,7 +70,7 @@ export default async function DiscoverPage() {
         <DiscoverClient 
           userId={user.id} 
           initialPending={pendingRequests || []}
-          initialBlocked={blockedUsers as any}
+          initialBlocked={blockedUsers as { id: string; profile: { id: string; username: string; unique_id: string; avatar_url: string | null } }[]}
           blockedUserIds={Array.from(blockedUserIds)}
           sentRequestIds={Array.from(sentRequestIds)}
           friendIds={Array.from(friendIds)}

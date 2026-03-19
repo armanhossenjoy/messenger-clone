@@ -1,9 +1,8 @@
 import { User } from "@supabase/supabase-js";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/lib/supabase/server";
-import { Search, MessageCircle } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import Link from "next/link";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { SidebarNav } from "./SidebarNav";
 import { FriendList } from "./FriendList";
@@ -63,7 +62,7 @@ export async function Sidebar({ user, profile }: { user: User, profile: Record<s
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto bg-white flex flex-col min-h-0">
-        <FriendList initialFriends={friends as any} userId={user.id} />
+        <FriendList initialFriends={friends as { id: string; username: string; avatar_url: string | null }[]} userId={user.id} />
       </div>
     </div>
   );
